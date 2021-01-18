@@ -1,0 +1,126 @@
+From 95cf5aefa9eb80ff57af5a01eddb1bed24448b71 Mon Sep 17 00:00:00 2001
+From: Alexandr Savca <alexandr.savca89@gmail.com>
+Date: Mon, 18 Jan 2021 12:07:58 +0200
+Subject: [PATCH] PKGMK_LOCALPATCHES_{DIR,CMD}: feature request
+
+Local patches provide a way for users to apply patches to
+port's source. Ports cannot be patched by this.
+---
+ pkgmk.conf      |  2 ++
+ pkgmk.conf.5.in | 57 +++++++++++++++++++++++++++++++++++++++++++++++++
+ pkgmk.in        | 11 +++++++++-
+ 3 files changed, 69 insertions(+), 1 deletion(-)
+
+diff --git a/pkgmk.conf b/pkgmk.conf
+index 781e8b9..381716c 100644
+--- a/pkgmk.conf
++++ b/pkgmk.conf
+@@ -27,6 +27,8 @@ esac
+ # PKGMK_SOURCE_DIR="$PWD"
+ # PKGMK_PACKAGE_DIR="$PWD"
+ # PKGMK_WORK_DIR="$PWD/work"
++# PKGMK_LOCALPATCHES_DIR=""
++# PKGMK_LOCALPATCHES_CMD=""
+ # PKGMK_DOWNLOAD="no"
+ # PKGMK_IGNORE_SIGNATURE="no"
+ # PKGMK_IGNORE_MD5SUM="no"
+diff --git a/pkgmk.conf.5.in b/pkgmk.conf.5.in
+index 98976d6..2edbc3f 100644
+--- a/pkgmk.conf.5.in
++++ b/pkgmk.conf.5.in
+@@ -49,6 +49,63 @@ Set directory for building packages.
+ .br
+ Default: '\fBfoo\fP/work', where \fBfoo\fP is the directory of the Pkgfile.
+ .TP
++\fBPKGMK_LOCALPATCHES_DIR='STRING'\fP
++Set directory for local patches that aren't part of ports.
++.sp
++If it's desired to store any patches that should not be committed into ports
++collections, they can be kept outside the ports tree in the
++\fBPKGMK_LOCALPATCHES_DIR\fP directory.
++.sp
++The directory tree is expected to have directories with port name,
++and arbitrarily named patch-files with suffix \fI.patch\fP or \fI.diff\fP that
++are stored inside these dirs.
++.sp
++For example, if you want to keep a private patch for the \fIpng\fP port, keep
++it in PKGMK_LOCALPATCHES_DIR/\fIpng\fP/patch.diff.
++.sp
++All files in the named directory will be applied with \fI-p1\fP patch arg and
++before the Pkgfile's "build()" function.
++.sp
++Default: none
++.TP
++\fBPKGMK_LOCALPATCHES_CMD='STRING'\fP
++Use specified command to apply local patches stored in
++\fBPKGMK_LOCALPATCHES_DIR\fP.
++.sp
++By default, patches are applied to all directories in \fBPKGMK_WORK_DIR/src/\fP.
++Since this directory contains most often only one directory (unpacked tarball)
++- this is enough.  If the \fBPKGMK_WORK_DIR/src\fP contains multiple
++directories, there are several solutions:
++.RS
++.IP \(bu 2
++Use patches with full prefixes to extracted sources:
++.sp
++.nf 3
++--- png-1.2.3/src/file.c
+++++ png-1.2.3/src/file.c
++.fi
++.sp
++And the following command:
++.sp
++PKGMK_LOCALPATCHES_CMD="patch -r- --no-backup-if-mismatch -d $PKGMK_WORK_DIR/src -Np0".
++.sp
++This method is clean and elegant, but has disadvantages. For example, with each
++new version of the port, you will need to edit the patch.
++.sp
++.IP \(bu 2
++Use per/port setting. E.g:
++.sp
++.nf 3
++case $name in
++port1|port2) PKGMK_LOCALPATCHES_CMD="..." ;;
++*) ;;
++esac
++.fi
++.RE
++.IP
++Default: "patch -r- --no-backup-if-mismatch -d "$PKGMK_WORK_DIR/src"/*/ -Np1".
++.br
++.TP
+ \fBPKGMK_DOWNLOAD_PROG='STRING'\fP
+ Use specified program to download source archives. Valid strings are curl and wget.
+ .br
+diff --git a/pkgmk.in b/pkgmk.in
+index 7b88fb1..636db42 100755
+--- a/pkgmk.in
++++ b/pkgmk.in
+@@ -519,6 +519,15 @@ remove_work_dir() {
+ 	rm -rf $PKGMK_WORK_DIR
+ }
+ 
++apply_patches() {
++	if [ -z "$PKGMK_LOCALPATCHES_CMD" ]; then
++		PKGMK_LOCALPATCHES_CMD="patch -r- --no-backup-if-mismatch -d "$SRC"/*/ -Np1"
++	fi
++	if [ -n "$PKGMK_LOCALPATCHES_DIR" ] && [ -d "$PKGMK_LOCALPATCHES_DIR/$name" ]; then
++		find "$PKGMK_LOCALPATCHES_DIR/$name" -type f -name "*.diff" -o -name "*.patch" \
++			| xargs -I{} $PKGMK_LOCALPATCHES_CMD -i {}
++	fi
++}
+ 
+ build_package() {
+ 	local BUILD_SUCCESSFUL="no"
+@@ -536,7 +545,7 @@ build_package() {
+ 	unpack_source
+ 
+ 	cd $SRC
+-	(set -e -x ; build)
++	(set -e -x ; apply_patches ; build)
+ 
+ 	if [ $? = 0 ]; then
+ 		if [ "$PKGMK_NO_STRIP" = "no" ]; then
+-- 
+2.30.0
+

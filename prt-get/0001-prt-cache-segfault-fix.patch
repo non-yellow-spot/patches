@@ -1,0 +1,25 @@
+diff --git a/src/prtget.cpp b/src/prtget.cpp
+index 8d983c8..b03515e 100644
+--- a/src/prtget.cpp
++++ b/src/prtget.cpp
+@@ -1806,6 +1806,11 @@ void PrtGet::ls()
+     if ( p ) {
+         string dirname = p->path() + "/" + p->name();
+         DIR* dir = opendir(dirname.c_str());
++        if (dir == NULL) {
++                cerr << "Directory " << dirname << " not found" << endl;
++                m_returnValue = PG_GENERAL_ERROR;
++                return;
++        }
+         struct dirent* entry;
+         vector<string> files;
+         while ((entry = readdir(dir))) {
+@@ -1848,7 +1853,7 @@ void PrtGet::cat()
+         }
+         string file = p->path() + "/" + p->name() + "/" + fileName;
+         if (!printFile(file)) {
+-            cerr << "File '" << *it << "' not found" << endl;
++            cerr << "File '" << fileName << "' not found" << endl;
+             m_returnValue = PG_GENERAL_ERROR;
+             return;
+         }
